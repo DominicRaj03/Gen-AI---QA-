@@ -1,21 +1,21 @@
 import streamlit as st
-import openai
+from groq import Groq
 import requests
 import json
 import pandas as pd
 from requests.auth import HTTPBasicAuth
 from faker import Faker
 
-# --- INITIALIZATION & CONFIG ---
-st.set_page_config(page_title="Jarvis QA Suite", layout="wide", page_icon="🤖")
+# --- INITIALIZATION ---
+st.set_page_config(page_title="Jarvis QA POC (Free)", layout="wide", page_icon="🛡️")
 fake = Faker()
 
 # --- CSS STYLING ---
 st.markdown("""
     <style>
-    .main { background-color: #f5f7f9; }
-    .stButton>button { width: 100%; border-radius: 8px; height: 3em; background-color: #0047AB; color: white; font-weight: bold; }
-    .stTextArea>div>div>textarea { font-family: 'Courier New', Monospace; border: 1px solid #ddd; }
+    .main { background-color: #f8f9fa; }
+    .stButton>button { width: 100%; border-radius: 8px; height: 3em; background-color: #00a152; color: white; font-weight: bold; }
+    .stTextArea>div>div>textarea { font-family: 'monospace'; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -37,33 +37,37 @@ def fetch_azure_data(org, project, pat, item_id):
         return f"TITLE: {fields['System.Title']}\nDESC: {fields.get('System.Description', '')}"
     return f"Error: {res.status_code}"
 
-# --- AI ENGINE ---
-class JarvisAI:
+# --- FREE AI ENGINE (GROQ) ---
+class JarvisFreeAI:
     def __init__(self, key, model):
-        self.client = openai.OpenAI(api_key=key)
+        self.client = Groq(api_key=key)
         self.model = model
 
     def ask(self, role, content):
         try:
-            resp = self.client.chat.completions.create(
+            completion = self.client.chat.completions.create(
                 model=self.model,
-                messages=[{"role": "system", "content": f"You are a {role}."}, {"role": "user", "content": content}],
+                messages=[
+                    {"role": "system", "content": f"You are a professional {role}."},
+                    {"role": "user", "content": content}
+                ],
                 temperature=0.1
             )
-            return resp.choices[0].message.content
+            return completion.choices[0].message.content
         except Exception as e:
-            return f"Error: {str(e)}"
+            return f"POC Error: {str(e)}"
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.header("🧠 Jarvis Settings")
-    api_key = st.text_input("OpenAI API Key", type="password")
-    model = st.selectbox("LLM Model", ["gpt-4o", "gpt-4-turbo"])
+    st.header("⚙️ POC Configuration")
+    groq_key = st.text_input("Groq API Key (Free)", type="password", help="Get it from console.groq.com")
+    model_name = st.selectbox("Model", ["llama3-70b-8192", "mixtral-8x7b-32768"])
+    
     st.divider()
-    st.header("🔗 Integrations")
-    source_type = st.radio("Sync Source", ["Manual", "Jira", "Azure DevOps"])
+    st.header("🔗 External Sync")
+    source_type = st.radio("Requirement Source", ["Manual", "Jira", "Azure DevOps"])
     if source_type == "Jira":
-        j_domain = st.text_input("Jira Domain")
+        j_domain = st.text_input("Domain")
         j_email = st.text_input("Email")
         j_token = st.text_input("Token", type="password")
     elif source_type == "Azure DevOps":
@@ -72,80 +76,70 @@ with st.sidebar:
         a_pat = st.text_input("PAT", type="password")
 
 # --- MAIN UI ---
-st.title("🛡️ Jarvis: Enterprise QA Generation Tool")
+st.title("🛡️ Jarvis: QA Automation POC")
+st.caption("Running on Open-Source Models via Groq Free Tier")
 
-if not api_key:
-    st.info("👋 Enter your OpenAI API key in the sidebar to begin.")
+if not groq_key:
+    st.warning("⚠️ Please enter a Groq API Key to enable AI features.")
     st.stop()
 
-jarvis = JarvisAI(api_key, model)
+jarvis = JarvisFreeAI(groq_key, model_name)
 
-# 1. Input Section
-st.subheader("1. Requirements Ingestion")
-col_in, col_bt = st.columns([4, 1])
-with col_in:
-    item_id = st.text_input("Issue Key / ID", placeholder="e.g. QA-123")
-with col_bt:
+# 1. Ingestion
+st.subheader("1. Requirement Ingestion")
+col_id, col_btn = st.columns([4, 1])
+with col_id:
+    item_id = st.text_input("Issue ID", placeholder="PROJ-101")
+with col_btn:
     st.write(" ")
     if st.button("Fetch"):
         if source_type == "Jira":
-            st.session_state['req_content'] = fetch_jira_data(j_domain, j_email, j_token, item_id)
+            st.session_state['req'] = fetch_jira_data(j_domain, j_email, j_token, item_id)
         elif source_type == "Azure DevOps":
-            st.session_state['req_content'] = fetch_azure_data(a_org, a_proj, a_pat, item_id)
+            st.session_state['req'] = fetch_azure_data(a_org, a_proj, a_pat, item_id)
 
-user_story = st.text_area("Requirement Content:", value=st.session_state.get('req_content', ""), height=150)
+user_story = st.text_area("Requirement Text:", value=st.session_state.get('req', ""), height=150)
 
-# 2. Main Workflow Tabs
-tabs = st.tabs(["🔍 Evaluator", "📝 BDD", "🧪 Test Gen", "🛡️ Edge Cases", "💻 Script Gen", "📊 Audit", "🔢 Data", "📤 Export", "🔄 Feedback Loop"])
+# 2. Tabs Workflow
+tabs = st.tabs(["🔍 Evaluator", "📝 BDD", "🧪 Test Gen", "🛡️ Edge Case", "💻 Script Gen", "🔄 Feedback", "🔢 Data", "📤 Export"])
 
 with tabs[0]: # Evaluator
-    if st.button("Evaluate"):
-        st.markdown(jarvis.ask("Senior QA Architect", f"Analyze for INVEST & ambiguity: {user_story}"))
+    if st.button("Run INVEST Audit"):
+        st.markdown(jarvis.ask("Senior QA Architect", f"Evaluate for INVEST and ambiguity: {user_story}"))
 
 with tabs[1]: # BDD
-    if st.button("Gen Gherkin"):
-        res = jarvis.ask("BDD Specialist", f"Convert to Gherkin: {user_story}")
+    if st.button("Generate Gherkin"):
+        res = jarvis.ask("BDD Specialist", f"Convert to Given/When/Then: {user_story}")
         st.session_state['bdd'] = res
         st.code(res, language='gherkin')
 
 with tabs[2]: # Test Gen
-    if st.button("Gen Tests"):
-        res = jarvis.ask("QA Manager", f"Generate Test Suite for: {st.session_state.get('bdd', user_story)}")
+    if st.button("Generate Cases"):
+        res = jarvis.ask("QA Manager", f"Generate Happy/Negative/Edge test cases for: {st.session_state.get('bdd', user_story)}")
         st.session_state['tc'] = res
         st.markdown(res)
 
 with tabs[3]: # Edge Case
-    if st.button("Explore Security"):
-        st.markdown(jarvis.ask("Security Engineer", f"Identify complex edge cases for: {user_story}"))
+    if st.button("Explore Vulnerabilities"):
+        st.markdown(jarvis.ask("Security Engineer", f"Identify Security/Perf edge cases: {user_story}"))
 
 with tabs[4]: # Script Gen
-    framework = st.selectbox("Framework", ["Cypress", "Playwright", "Selenium"])
-    if st.button("Gen Code"):
-        res = jarvis.ask("SDET", f"Convert to {framework} code stubs: {st.session_state.get('tc', user_story)}")
-        st.code(res)
+    frame = st.selectbox("Framework", ["Cypress", "Playwright", "Selenium"])
+    if st.button("Generate Code"):
+        st.code(jarvis.ask("SDET", f"Write {frame} code for: {st.session_state.get('tc', user_story)}"))
 
-with tabs[5]: # Audit
-    if st.button("Audit"):
-        st.markdown(jarvis.ask("QA Auditor", f"Check for logic gaps in: {st.session_state.get('tc', '')}"))
+with tabs[5]: # Feedback
+    logs = st.text_area("Execution Logs:")
+    if st.button("Analyze Logs"):
+        st.markdown(jarvis.ask("QA Consultant", f"Analyze this failure log against the story: {logs} \nStory: {user_story}"))
 
 with tabs[6]: # Data Factory
-    fields = st.multiselect("Fields", ["name", "email", "phone_number", "company"])
-    rows = st.slider("Count", 1, 50, 5)
-    if st.button("Gen Data"):
+    fields = st.multiselect("Fields", ["name", "email", "phone_number", "company", "address"])
+    rows = st.slider("Records", 1, 20, 5)
+    if st.button("Generate Fake Data"):
         st.table([{f: getattr(fake, f)() for f in fields} for _ in range(rows)])
 
 with tabs[7]: # Export
-    if st.button("Jira CSV"):
-        res = jarvis.ask("Data Architect", f"Format as Jira CSV: {st.session_state.get('tc', '')}")
-        st.download_button("Download", data=res, file_name="jira.csv")
-
-# 🔄 3. FEEDBACK LOOP (NEW)
-with tabs[8]:
-    st.subheader("Analysis of Test Execution Failures")
-    log_input = st.text_area("Paste Execution Logs / Error Stack Trace:", height=200)
-    if st.button("Analyze Failure"):
-        prompt = (f"Analyze this test failure log: {log_input}. "
-                  f"Compare it against the requirement: {user_story}. "
-                  "Identify if it is a 'Script Issue', 'Environment Issue', or 'Actual Bug'. "
-                  "Suggest specific fixes for the Test Case or Automation Script.")
-        st.markdown(jarvis.ask("Test Automation Consultant", prompt))
+    if st.button("Jira CSV Format"):
+        csv = jarvis.ask("Data Architect", f"Convert to Jira CSV (Summary, Issue Type, Priority, Description, Steps): {st.session_state.get('tc', '')}")
+        st.download_button("Download CSV", csv, file_name="poc_tests.csv")
