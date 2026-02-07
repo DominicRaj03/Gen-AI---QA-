@@ -6,7 +6,8 @@ from requests.auth import HTTPBasicAuth
 from faker import Faker
 
 # --- INITIALIZATION & STYLING ---
-st.set_page_config(page_title="Gen AI - QA", layout="wide", page_icon="🛡️")
+# Updated Browser Tab Title
+st.set_page_config(page_title="Gen AI - Quality Assurance", layout="wide", page_icon="🛡️")
 fake = Faker()
 
 st.markdown("""
@@ -34,7 +35,7 @@ def fetch_azure(org, project, pat, item_id):
         return f"TITLE: {f['System.Title']}\nDESC: {f.get('System.Description', '')}"
     return f"Error: {res.status_code}"
 
-# --- GROQ ENGINE (Updated for 2026) ---
+# --- GROQ ENGINE ---
 class JarvisPOC:
     def __init__(self, key, model):
         self.client = Groq(api_key=key)
@@ -44,7 +45,7 @@ class JarvisPOC:
         try:
             resp = self.client.chat.completions.create(
                 model=self.model,
-                messages=[{"role": "system", "content": f"You are a {role}."}, 
+                messages=[{"role": "system", "content": f"You are a professional {role}."}, 
                           {"role": "user", "content": content}],
                 temperature=0.1
             )
@@ -56,7 +57,6 @@ class JarvisPOC:
 with st.sidebar:
     st.header("🧠 POC Settings")
     groq_key = st.text_input("Groq API Key (Free)", type="password")
-    # Updated to 2026 high-performance models
     model_name = st.selectbox("LLM Model", ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"])
     
     st.divider()
@@ -72,10 +72,12 @@ with st.sidebar:
         a_pat = st.text_input("PAT", type="password")
 
 # --- MAIN INTERFACE ---
-st.title("🛡️ Jarvis: Enterprise QA POC")
+# Updated Main App Title
+st.title("🛡️ Gen AI - Quality Assurance")
+st.caption("Jarvis QE Suite v1.0 | Powered by Groq")
 
 if not groq_key:
-    st.info("💡 Get a free API key at console.groq.com to start the POC.")
+    st.info("💡 Please provide your Groq API key in the sidebar to activate the POC.")
     st.stop()
 
 jarvis = JarvisPOC(groq_key, model_name)
@@ -84,7 +86,7 @@ jarvis = JarvisPOC(groq_key, model_name)
 st.subheader("1. Requirement Context")
 c1, c2 = st.columns([4, 1])
 with c1:
-    item_id = st.text_input("Requirement ID", placeholder="QA-123")
+    item_id = st.text_input("Requirement ID", placeholder="e.g., PROJ-101")
 with c2:
     st.write(" ")
     if st.button("Sync Data"):
@@ -104,31 +106,25 @@ with tabs[0]: # Evaluator
 
 with tabs[1]: # BDD
     if st.button("Gen Gherkin"):
-        res = jarvis.ask("BDD Expert", f"Convert to Gherkin: {user_story}")
+        res = jarvis.ask("BDD Expert", f"Convert to Gherkin Given/When/Then: {user_story}")
         st.session_state['bdd'] = res
         st.code(res, language='gherkin')
 
 with tabs[2]: # Test Gen
     if st.button("Gen Test Suite"):
-        res = jarvis.ask("QA Architect", f"Generate Test Suite: {st.session_state.get('bdd', user_story)}")
+        res = jarvis.ask("QA Architect", f"Generate Happy, Negative, and Edge test cases for: {st.session_state.get('bdd', user_story)}")
         st.session_state['tc'] = res
         st.markdown(res)
 
 with tabs[3]: # Edge Case
     if st.button("Find Vulnerabilities"):
-        st.markdown(jarvis.ask("Security Engineer", f"Identify Security/Perf edge cases: {user_story}"))
+        st.markdown(jarvis.ask("Security Engineer", f"Identify Security/Perf edge cases and OWASP risks: {user_story}"))
 
 with tabs[4]: # Script Gen
     frame = st.selectbox("Framework", ["Cypress", "Playwright", "Selenium"])
     if st.button("Gen Automation"):
-        st.code(jarvis.ask("SDET", f"Write {frame} code for: {st.session_state.get('tc', user_story)}"))
+        st.code(jarvis.ask("SDET", f"Write {frame} automation code for: {st.session_state.get('tc', user_story)}"))
 
 with tabs[5]: # Feedback
     logs = st.text_area("Execution Logs:")
-    if st.button("Analyze Failures"):
-        st.markdown(jarvis.ask("QA Consultant", f"Analyze logs: {logs} \nStory: {user_story}"))
-
-with tabs[6]: # Data
-    fields = st.multiselect("Fields", ["name", "email", "company", "phone_number"])
-    if st.button("Gen Fake Data"):
-        st.table([{f: getattr(fake, f)() for f in fields} for _ in range(5)])
+    if
