@@ -1,5 +1,5 @@
 streamlit
 groq
-requests
 faker
 pandas
+fpdf2
