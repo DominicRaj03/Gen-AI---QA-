@@ -3,9 +3,22 @@ from groq import Groq
 from faker import Faker
 from fpdf import FPDF
 
-# --- INITIALIZATION ---
+# --- INITIALIZATION & STYLING ---
 st.set_page_config(page_title="Gen AI - Quality Assurance", layout="wide", page_icon="🛡️")
 fake = Faker()
+
+st.markdown("""
+    <style>
+    @keyframes pulse {
+        0% { transform: scale(1); opacity: 0.8; }
+        50% { transform: scale(1.05); opacity: 1; }
+        100% { transform: scale(1); opacity: 0.8; }
+    }
+    .pulse-shield { font-size: 70px; text-align: center; animation: pulse 2s infinite ease-in-out; }
+    .stButton>button { background-color: #00a152; color: white; border-radius: 8px; font-weight: bold; width: 100%; }
+    .stCodeBlock { border: 1px solid #00a152 !important; }
+    </style>
+    """, unsafe_allow_html=True)
 
 # --- UTILITY: PDF GENERATOR ---
 def create_pdf(title, content):
@@ -15,8 +28,9 @@ def create_pdf(title, content):
     pdf.cell(200, 10, txt=title, ln=True, align='C')
     pdf.ln(10)
     pdf.set_font("Arial", size=11)
-    # multi_cell ensures text doesn't get cut off in the PDF
-    pdf.multi_cell(0, 10, txt=content.encode('latin-1', 'replace').decode('latin-1'))
+    # Replaces non-latin-1 characters to avoid PDF generation errors
+    safe_text = content.encode('latin-1', 'replace').decode('latin-1')
+    pdf.multi_cell(0, 10, txt=safe_text)
     return pdf.output(dest='S')
 
 # --- ENGINE ---
@@ -39,32 +53,79 @@ class JarvisPOC:
                 return f"❌ Error: {str(e)}"
 
 # --- UI HEADER ---
-st.markdown("<h1 style='text-align: center;'>🛡️ Gen AI - Quality Assurance</h1>", unsafe_allow_html=True)
+st.markdown('<div class="pulse-shield">🛡️</div>', unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center;'>Gen AI - Quality Assurance</h1>", unsafe_allow_html=True)
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("🔑 Configuration")
     groq_key = st.text_input("Groq API Key", type="password")
-    model_name = st.selectbox("Model", ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"])
+    model_name = st.selectbox("Intelligence Model", ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"])
     st.divider()
-    if not groq_key: st.stop()
+    if not groq_key:
+        st.info("Enter Groq API Key to start.")
+        st.stop()
 
 jarvis = JarvisPOC(groq_key, model_name)
 
 # --- MAIN WORKFLOW ---
-user_story = st.text_area("Input Requirement / User Story:", height=150)
+user_story = st.text_area("Input Requirement / User Story:", height=150, placeholder="As a user, I want to...")
 
-# Back to original Tab structure with addition of Strategy & Plan
 tabs = st.tabs(["🔍 Evaluator", "🧪 Test Gen", "📜 Strategy & Plan", "💻 Script Gen", "🔢 Data Factory"])
 
 # 1. EVALUATOR
 with tabs[0]:
     if st.button("Analyze Quality"):
-        res = jarvis.ask("Senior QA Lead", f"Analyze for INVEST & ambiguity: {user_story}")
-        with st.container(height=400, border=True): st.markdown(res)
+        res = jarvis.ask("Senior QA Lead", f"Analyze for INVEST and ambiguity: {user_story}")
+        with st.container(height=400, border=True): 
+            st.markdown(res)
         st.code(res)
 
-# 2. TEST GEN
+# 2. TEST GEN (Fixed f-string Syntax)
 with tabs[1]:
     if st.button("Build Test Suite"):
-        res = jarvis.ask("QA Architect", f"Generate Happy, Negative, and Edge
+        # Using triple quotes to safely handle multi-line string construction
+        prompt_text = f"""Generate Happy path, Negative, and Edge test cases for: 
+        {user_story}"""
+        res = jarvis.ask("QA Architect", prompt_text)
+        st.session_state['v1_tc'] = res
+        with st.container(height=450, border=True): 
+            st.markdown(res)
+        st.code(res)
+
+# 3. TEST STRATEGY & PLAN (IEEE 829 & PDF)
+with tabs[2]:
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Generate IEEE 829 Strategy"):
+            res = jarvis.ask("QA Director", f"Create an IEEE 829 Test Strategy for: {user_story}")
+            st.session_state['v1_strat'] = res
+        if 'v1_strat' in st.session_state:
+            with st.container(height=400, border=True): st.markdown(st.session_state['v1_strat'])
+            pdf_strat = create_pdf("Test Strategy (IEEE 829)", st.session_state['v1_strat'])
+            st.download_button("📥 Download PDF", data=pdf_strat, file_name="Strategy.pdf", mime="application/pdf")
+
+    with c2:
+        if st.button("Generate IEEE 829 Plan"):
+            res = jarvis.ask("QA Manager", f"Create an IEEE 829 Test Plan for: {user_story}")
+            st.session_state['v1_plan'] = res
+        if 'v1_plan' in st.session_state:
+            with st.container(height=400, border=True): st.markdown(st.session_state['v1_plan'])
+            pdf_plan = create_pdf("Test Plan (IEEE 829)", st.session_state['v1_plan'])
+            st.download_button("📥 Download PDF", data=pdf_plan, file_name="Plan.pdf", mime="application/pdf")
+
+# 4. SCRIPT GEN
+with tabs[3]:
+    frame = st.selectbox("Framework", ["Cypress", "Playwright", "Selenium"])
+    if st.button("Generate Automation"):
+        context = st.session_state.get('v1_tc', user_story)
+        res = jarvis.ask("SDET", f"Write {frame} scripts for these cases: {context}")
+        with st.container(height=450, border=True): 
+            st.code(res)
+
+# 5. DATA FACTORY
+with tabs[4]:
+    fields = st.multiselect("Fields", ["name", "email", "phone_number", "company"])
+    if st.button("Generate Fake Data"):
+        data = [{f: getattr(fake, f)() for f in fields} for _ in range(5)]
+        st.table(data)
