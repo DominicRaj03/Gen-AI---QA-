@@ -15,7 +15,6 @@ def create_pdf(title, content):
     pdf.cell(200, 10, txt=title, ln=True, align='C')
     pdf.ln(10)
     pdf.set_font("Arial", size=12)
-    # Multi_cell handles long content wrapping automatically
     pdf.multi_cell(0, 10, txt=content)
     return pdf.output(dest='S')
 
@@ -30,7 +29,7 @@ class JarvisPOC:
             try:
                 resp = self.client.chat.completions.create(
                     model=self.model,
-                    messages=[{"role": "system", "content": f"You are a {role}. Follow industry standards (INVEST, IEEE 829)."}, 
+                    messages=[{"role": "system", "content": f"You are a professional {role}."}, 
                               {"role": "user", "content": prompt}],
                     temperature=0.1
                 )
@@ -43,28 +42,32 @@ st.markdown("<h1 style='text-align: center;'>🛡️ Gen AI - Quality Assurance<
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.header("🔑 Config")
+    st.header("🔑 Configuration")
     groq_key = st.text_input("Groq API Key", type="password")
     model_name = st.selectbox("Model", ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"])
+    st.divider()
+    st.caption("v1.5 | Reverted Core + IEEE 829")
     if not groq_key: st.stop()
 
 jarvis = JarvisPOC(groq_key, model_name)
-user_story = st.text_area("Input Requirement:", height=100)
 
-tabs = st.tabs(["🔍 Evaluator", "📝 Test Cases", "📜 Strategy & Plan", "💻 Scripts", "🔢 Data"])
+# --- MAIN WORKFLOW ---
+user_story = st.text_area("Input Requirement / User Story:", height=100)
 
-# 1. EVALUATOR
+tabs = st.tabs(["🔍 Evaluator", "🧪 Test Gen", "📜 Strategy & Plan", "💻 Scripts", "🔢 Data"])
+
+# 1. EVALUATOR (Scrollable)
 with tabs[0]:
-    if st.button("Audit Story"):
-        res = jarvis.ask("Requirement Analyst", f"Audit for INVEST/ambiguity: {user_story}")
+    if st.button("Audit Story Quality"):
+        res = jarvis.ask("Senior QA Lead", f"Analyze for INVEST & ambiguity: {user_story}")
         with st.container(height=400, border=True): st.markdown(res)
-        st.code(res) # Copy option
+        st.code(res)
 
-# 2. CATEGORIZED TEST CASES
+# 2. TEST GEN (Categorized)
 with tabs[1]:
     if st.button("Generate Suite"):
         prompt = f"Categorize as [POSITIVE], [NEGATIVE], [DATA], [OUT-OF-BOX]: {user_story}"
-        res = jarvis.ask("QA Lead", prompt)
+        res = jarvis.ask("QA Architect", prompt)
         st.session_state['tc_suite'] = res
         with st.container(height=450, border=True): st.markdown(res)
         st.code(res)
@@ -74,9 +77,8 @@ with tabs[2]:
     c1, c2 = st.columns(2)
     with c1:
         if st.button("Gen IEEE 829 Strategy"):
-            res = jarvis.ask("QA Director", f"IEEE 829 Test Strategy for: {user_story}")
+            res = jarvis.ask("QA Director", f"Create IEEE 829 Test Strategy (Scope, Approach, Tools) for: {user_story}")
             st.session_state['strat'] = res
-        
         if 'strat' in st.session_state:
             with st.container(height=350, border=True): st.markdown(st.session_state['strat'])
             pdf_bytes = create_pdf("Test Strategy (IEEE 829)", st.session_state['strat'])
@@ -84,9 +86,8 @@ with tabs[2]:
 
     with c2:
         if st.button("Gen IEEE 829 Plan"):
-            res = jarvis.ask("QA Manager", f"IEEE 829 Test Plan for: {user_story}")
+            res = jarvis.ask("QA Manager", f"Create IEEE 829 Test Plan (Items, Criteria, Risks, Schedule) for: {user_story}")
             st.session_state['plan'] = res
-            
         if 'plan' in st.session_state:
             with st.container(height=350, border=True): st.markdown(st.session_state['plan'])
             pdf_bytes = create_pdf("Test Plan (IEEE 829)", st.session_state['plan'])
@@ -94,7 +95,13 @@ with tabs[2]:
 
 # 4. SCRIPT GEN
 with tabs[3]:
-    frame = st.selectbox("Framework", ["Cypress", "Playwright"])
-    if st.button("Gen Code"):
-        res = jarvis.ask("SDET", f"Write {frame} for: {st.session_state.get('tc_suite', user_story)}")
+    frame = st.selectbox("Framework", ["Cypress", "Playwright", "Selenium"])
+    if st.button("Generate Automation"):
+        res = jarvis.ask("SDET", f"Write {frame} scripts for: {st.session_state.get('tc_suite', user_story)}")
         with st.container(height=450, border=True): st.code(res)
+
+# 5. DATA FACTORY
+with tabs[4]:
+    fields = st.multiselect("Fields", ["name", "email", "phone_number", "company"])
+    if st.button("Generate Fake Data"):
+        st.table([{f: getattr(fake, f)() for f in fields} for _ in range(5)])
