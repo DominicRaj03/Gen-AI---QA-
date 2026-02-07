@@ -1,4 +1,5 @@
 import streamlit as st
+import time
 from groq import Groq
 import requests
 import pandas as pd
@@ -6,125 +7,113 @@ from requests.auth import HTTPBasicAuth
 from faker import Faker
 
 # --- INITIALIZATION & STYLING ---
-# Updated Browser Tab Title
 st.set_page_config(page_title="Gen AI - Quality Assurance", layout="wide", page_icon="🛡️")
 fake = Faker()
 
+# Custom CSS for Animations and UI
 st.markdown("""
     <style>
-    .main { background-color: #f8f9fa; }
-    .stButton>button { background-color: #00a152; color: white; font-weight: bold; border-radius: 8px; height: 3em; }
-    .stTextArea>div>div>textarea { font-family: 'monospace'; font-size: 14px; }
+    @keyframes pulse {
+        0% { transform: scale(1); opacity: 0.8; }
+        50% { transform: scale(1.05); opacity: 1; }
+        100% { transform: scale(1); opacity: 0.8; }
+    }
+    .pulse-shield { font-size: 70px; text-align: center; animation: pulse 2s infinite ease-in-out; }
+    .fade-in { animation: fadeIn 1.5s; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .stButton>button { background-color: #00a152; color: white; border-radius: 8px; font-weight: bold; }
+    .stTextArea textarea { font-family: 'Courier New', Courier, monospace; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- API INTEGRATIONS ---
-def fetch_jira(domain, email, token, key):
-    url = f"https://{domain}.atlassian.net/rest/api/3/issue/{key}"
-    res = requests.get(url, auth=HTTPBasicAuth(email, token))
-    if res.status_code == 200:
-        fields = res.json()['fields']
-        return f"SUMMARY: {fields['summary']}\nDESC: {str(fields.get('description', ''))}"
-    return f"Error: {res.status_code}"
-
-def fetch_azure(org, project, pat, item_id):
-    url = f"https://dev.azure.com/{org}/{project}/_apis/wit/workitems/{item_id}?api-version=7.1"
-    res = requests.get(url, auth=('', pat))
-    if res.status_code == 200:
-        f = res.json()['fields']
-        return f"TITLE: {f['System.Title']}\nDESC: {f.get('System.Description', '')}"
-    return f"Error: {res.status_code}"
-
-# --- GROQ ENGINE ---
+# --- ENGINE ---
 class JarvisPOC:
     def __init__(self, key, model):
         self.client = Groq(api_key=key)
         self.model = model
 
     def ask(self, role, content):
-        try:
-            resp = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "system", "content": f"You are a professional {role}."}, 
-                          {"role": "user", "content": content}],
-                temperature=0.1
-            )
-            return resp.choices[0].message.content
-        except Exception as e:
-            return f"Error: {str(e)}"
+        # Professional loading context
+        with st.spinner(f"🚀 Jarvis is analyzing as a {role}..."):
+            try:
+                resp = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[{"role": "system", "content": f"You are a professional {role}."}, 
+                              {"role": "user", "content": content}],
+                    temperature=0.1
+                )
+                return resp.choices[0].message.content
+            except Exception as e:
+                return f"❌ Error: {str(e)}"
 
-# --- SIDEBAR CONFIG ---
+# --- WELCOME SCREEN ---
+def welcome_ui():
+    st.markdown('<div class="pulse-shield">🛡️</div>', unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>Gen AI - Quality Assurance</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center;' class='fade-in'>Next-Gen Software Testing Life Cycle Orchestrator</p>", unsafe_allow_html=True)
+    
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Cycle Time", "-70%", "Efficiency")
+    m2.metric("Defect Leakage", "-40%", "Quality")
+    m3.metric("ROI", "5x", "Project Value")
+    st.divider()
+
+# --- SIDEBAR & AUTH ---
+welcome_ui()
+
 with st.sidebar:
-    st.header("🧠 POC Settings")
-    groq_key = st.text_input("Groq API Key (Free)", type="password")
-    model_name = st.selectbox("LLM Model", ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"])
+    st.header("🔑 Secure Access")
+    groq_key = st.text_input("Groq API Key", type="password", help="Enter key to unlock Jarvis features.")
+    model_name = st.selectbox("Intelligence Model", ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"])
     
     st.divider()
-    st.header("🔗 Requirements Sync")
-    source = st.radio("Source", ["Manual", "Jira", "Azure DevOps"])
-    if source == "Jira":
-        j_dom = st.text_input("Domain")
-        j_user = st.text_input("Email")
-        j_pass = st.text_input("Token", type="password")
-    elif source == "Azure DevOps":
-        a_org = st.text_input("Org")
-        a_proj = st.text_input("Project")
-        a_pat = st.text_input("PAT", type="password")
-
-# --- MAIN INTERFACE ---
-# Updated Main App Title
-st.title("🛡️ Gen AI - Quality Assurance")
-st.caption("Jarvis QE Suite v1.0 | Powered by Groq")
+    st.header("🔗 Integrations")
+    source = st.radio("Story Source", ["Manual", "Jira", "Azure DevOps"])
+    if source != "Manual":
+        st.info(f"Connecting to {source}...")
 
 if not groq_key:
-    st.info("💡 Please provide your Groq API key in the sidebar to activate the POC.")
+    st.info("👋 To begin the demo, please enter your Groq API key in the sidebar.")
     st.stop()
 
 jarvis = JarvisPOC(groq_key, model_name)
 
-# 1. Requirement Input
-st.subheader("1. Requirement Context")
-c1, c2 = st.columns([4, 1])
-with c1:
-    item_id = st.text_input("Requirement ID", placeholder="e.g., PROJ-101")
-with c2:
-    st.write(" ")
-    if st.button("Sync Data"):
-        if source == "Jira":
-            st.session_state['req'] = fetch_jira(j_dom, j_user, j_pass, item_id)
-        elif source == "Azure DevOps":
-            st.session_state['req'] = fetch_azure(a_org, a_proj, a_pat, item_id)
+# --- WORKFLOW TABS ---
+user_story = st.text_area("Input Requirement / User Story:", height=150, placeholder="As a user, I want to...")
 
-user_story = st.text_area("Requirement Content:", value=st.session_state.get('req', ""), height=150)
-
-# 2. Workflow Tabs
-tabs = st.tabs(["🔍 Evaluator", "📝 BDD", "🧪 Test Gen", "🛡️ Edges", "💻 Script Gen", "🔄 Feedback", "🔢 Data"])
+tabs = st.tabs(["🔍 Evaluator", "📝 BDD", "🧪 Test Gen", "🛡️ Edge Cases", "💻 Script Gen", "🔄 Feedback Loop", "🔢 Data Factory"])
 
 with tabs[0]: # Evaluator
-    if st.button("Audit Story"):
-        st.markdown(jarvis.ask("Senior QA Lead", f"Analyze for INVEST criteria: {user_story}"))
+    if st.button("Analyze Quality"):
+        st.markdown(jarvis.ask("Senior QA Lead", f"Analyze for INVEST & ambiguity: {user_story}"))
 
 with tabs[1]: # BDD
-    if st.button("Gen Gherkin"):
-        res = jarvis.ask("BDD Expert", f"Convert to Gherkin Given/When/Then: {user_story}")
+    if st.button("Generate Gherkin"):
+        res = jarvis.ask("BDD Specialist", f"Convert to Gherkin: {user_story}")
         st.session_state['bdd'] = res
         st.code(res, language='gherkin')
 
 with tabs[2]: # Test Gen
-    if st.button("Gen Test Suite"):
-        res = jarvis.ask("QA Architect", f"Generate Happy, Negative, and Edge test cases for: {st.session_state.get('bdd', user_story)}")
+    if st.button("Build Test Suite"):
+        res = jarvis.ask("QA Architect", f"Generate Test Suite for: {st.session_state.get('bdd', user_story)}")
         st.session_state['tc'] = res
         st.markdown(res)
 
-with tabs[3]: # Edge Case
-    if st.button("Find Vulnerabilities"):
-        st.markdown(jarvis.ask("Security Engineer", f"Identify Security/Perf edge cases and OWASP risks: {user_story}"))
+with tabs[3]: # Edge Cases
+    if st.button("Scan Vulnerabilities"):
+        st.markdown(jarvis.ask("Security Engineer", f"Identify complex edge cases: {user_story}"))
 
 with tabs[4]: # Script Gen
     frame = st.selectbox("Framework", ["Cypress", "Playwright", "Selenium"])
-    if st.button("Gen Automation"):
-        st.code(jarvis.ask("SDET", f"Write {frame} automation code for: {st.session_state.get('tc', user_story)}"))
+    if st.button("Generate Script"):
+        st.code(jarvis.ask("SDET", f"Write {frame} automation for: {st.session_state.get('tc', user_story)}"))
 
 with tabs[5]: # Feedback
-    logs = st.text_area("Execution Logs:")
-    if
+    logs = st.text_area("Paste Execution Logs:")
+    if st.button("Perform RCA"):
+        st.markdown(jarvis.ask("Test Automation Consultant", f"Analyze failure logs: {logs}"))
+
+with tabs[6]: # Data
+    fields = st.multiselect("Fields", ["name", "email", "phone_number", "company"])
+    if st.button("Generate Data"):
+        st.table([{f: getattr(fake, f)() for f in fields} for _ in range(5)])
